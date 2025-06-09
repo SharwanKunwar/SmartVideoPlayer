@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 
-export default function FaceDetect() {
+export default function EyeStateDetector() {
   const videoRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
   const [eyesOpen, setEyesOpen] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -52,7 +51,6 @@ export default function FaceDetect() {
           .withFaceLandmarks(true);
 
         if (detection) {
-          setFaceDetected(true);
           const landmarks = detection.landmarks;
           const leftEye = landmarks.getLeftEye();
           const rightEye = landmarks.getRightEye();
@@ -61,11 +59,9 @@ export default function FaceDetect() {
           const rightEAR = EAR(rightEye);
           const avgEAR = (leftEAR + rightEAR) / 2;
 
-          // Threshold to determine eye state
-          setEyesOpen(avgEAR > 0.25); // Adjust threshold based on lighting/camera
+          setEyesOpen(avgEAR > 0.25); // Adjust threshold as needed
         } else {
-          setFaceDetected(false);
-          setEyesOpen(null);
+          setEyesOpen(null); // No face, can't check eyes
         }
       }
 
@@ -79,7 +75,7 @@ export default function FaceDetect() {
 
   return (
     <div style={{ textAlign: "center", padding: "1rem" }}>
-      <h2>Face + Eye Detection</h2>
+      <h2>Eye Status</h2>
       <video
         ref={videoRef}
         width="320"
@@ -90,11 +86,11 @@ export default function FaceDetect() {
       <p>
         {errorMessage
           ? errorMessage
-          : faceDetected
-          ? `Face: Detected ✅ | Eyes: ${
-              eyesOpen === null ? "..." : eyesOpen ? "Open 👀" : "Closed 😴"
-            }`
-          : "Face Not Detected ❌"}
+          : eyesOpen === null
+          ? "Detecting..."
+          : eyesOpen
+          ? "Eyes Open 👀"
+          : "Eyes Closed 😴"}
       </p>
     </div>
   );
