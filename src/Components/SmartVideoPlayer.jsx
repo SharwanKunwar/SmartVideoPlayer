@@ -1,20 +1,19 @@
-// src/SmartVideoPlayer.jsx
 import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 
 export default function SmartVideoPlayer() {
-  const videoRef = useRef(null); // Video player ref
-  const webcamRef = useRef(null); // Webcam feed ref
+  const videoRef = useRef(null);
+  const webcamRef = useRef(null);
 
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [cameraAllowed, setCameraAllowed] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Loading models...");
 
-  // Load face-api models from public/models folder
+  // Load face detection models
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // Public folder models path
+        const MODEL_URL = "/models";
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         setModelsLoaded(true);
@@ -29,7 +28,7 @@ export default function SmartVideoPlayer() {
     loadModels();
   }, []);
 
-  // Request camera permission and start webcam stream
+  // Start webcam
   useEffect(() => {
     if (modelsLoaded) {
       navigator.mediaDevices
@@ -39,18 +38,16 @@ export default function SmartVideoPlayer() {
             webcamRef.current.srcObject = stream;
             setCameraAllowed(true);
             setLoadingMessage("");
-            console.log("Camera started");
           }
         })
         .catch((err) => {
-          console.error("Camera permission denied or error:", err);
+          console.error("Camera permission denied:", err);
           setLoadingMessage("Camera access denied. Please allow camera to continue.");
-          setCameraAllowed(false);
         });
     }
   }, [modelsLoaded]);
 
-  // Face detection loop: play/pause video based on user's gaze
+  // Face detection: auto play/pause based on gaze
   useEffect(() => {
     if (!modelsLoaded || !cameraAllowed) return;
 
@@ -65,47 +62,55 @@ export default function SmartVideoPlayer() {
             .detectSingleFace(webcamRef.current, new faceapi.TinyFaceDetectorOptions())
             .withFaceLandmarks();
 
-          console.log("Detection:", detection);
-
           if (detection) {
             const leftEye = detection.landmarks.getLeftEye();
             const rightEye = detection.landmarks.getRightEye();
 
-            // Average Y position of eyes
             const avgEyeY = (leftEye[0].y + rightEye[3].y) / 2;
             const midY = webcamRef.current.videoHeight / 2;
 
-            if (avgEyeY > midY + 30 || avgEyeY < midY - 80) {
-              videoRef.current.pause(); // User looking away
-              console.log("User looking away - video paused");
+            const isLooking = avgEyeY < midY + 30 && avgEyeY > midY - 80;
+
+            if (isLooking) {
+              if (videoRef.current.paused) {
+                await videoRef.current.play();
+                console.log("👁️ Watching - Video playing");
+              }
             } else {
-              videoRef.current.play(); // User looking at screen
-              console.log("User looking at screen - video playing");
+              if (!videoRef.current.paused) {
+                videoRef.current.pause();
+                console.log("🙈 Looked away - Video paused");
+              }
             }
           } else {
-            videoRef.current.pause(); // No face detected
-            console.log("No face detected - video paused");
+            if (!videoRef.current.paused) {
+              videoRef.current.pause();
+              console.log("🚫 No face detected - Video paused");
+            }
           }
         } catch (error) {
           console.error("Detection error:", error);
         }
       }
-    }, 700); // Run every 0.7 seconds
+    }, 700);
 
     return () => clearInterval(interval);
   }, [modelsLoaded, cameraAllowed]);
 
   return (
     <div style={{ textAlign: "center", padding: "2rem" }}>
-      <h2>Smart Video Player 🎬</h2>
+      <h2>🎥 Smart Video Player</h2>
       {loadingMessage && <p>{loadingMessage}</p>}
 
       <video
         ref={videoRef}
         width="640"
         height="360"
-        controls
-        src="/video01.mp4"  // Ensure this file is in public folder
+        controls  // <-- Controls kept here!
+        muted
+        autoPlay={false} // Remove autoplay to prevent conflict with controls
+        playsInline
+        src="/video01.mp4"
         style={{ borderRadius: "10px", boxShadow: "0 0 10px gray" }}
       />
 
@@ -120,11 +125,11 @@ export default function SmartVideoPlayer() {
         />
         {cameraAllowed ? (
           <p style={{ fontStyle: "italic" }}>
-            👀 Keep your eyes on the screen to play video.
+            👁️ Stay focused on the screen to keep video playing.
           </p>
         ) : (
           <p style={{ color: "red" }}>
-            Camera not allowed. Please enable camera permission.
+            🚫 Camera not allowed. Please allow camera permission.
           </p>
         )}
       </div>
