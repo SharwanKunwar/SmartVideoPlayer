@@ -3,15 +3,15 @@ import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 
 export default function SmartVideoPlayer() {
-  const videoRef = useRef(null); // Video player ref
-  const webcamRef = useRef(null); // Webcam feed ref
+  const videoRef = useRef(null);
+  const webcamRef = useRef(null);
 
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [cameraAllowed, setCameraAllowed] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Loading models...");
-  const [userLooking, setUserLooking] = useState(true); // Track if user is looking
+  const [userLooking, setUserLooking] = useState(false);
 
-  // Load face-api models from public/models folder
+  // Load models
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -29,7 +29,7 @@ export default function SmartVideoPlayer() {
     loadModels();
   }, []);
 
-  // Request camera permission and start webcam stream
+  // Start webcam stream
   useEffect(() => {
     if (modelsLoaded) {
       navigator.mediaDevices
@@ -50,7 +50,7 @@ export default function SmartVideoPlayer() {
     }
   }, [modelsLoaded]);
 
-  // Face detection loop for play/pause + userLooking state
+  // Face detection loop with requestAnimationFrame for instant response
   useEffect(() => {
     if (!modelsLoaded || !cameraAllowed) return;
 
@@ -64,8 +64,16 @@ export default function SmartVideoPlayer() {
       ) {
         try {
           const detection = await faceapi
-            .detectSingleFace(webcamRef.current, new faceapi.TinyFaceDetectorOptions())
+            .detectSingleFace(
+              webcamRef.current,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize: 160,
+                scoreThreshold: 0.5,
+              })
+            )
             .withFaceLandmarks();
+
+          console.log("Detection result:", detection);
 
           if (detection) {
             const leftEye = detection.landmarks.getLeftEye();
@@ -74,27 +82,24 @@ export default function SmartVideoPlayer() {
             const avgEyeY = (leftEye[0].y + rightEye[3].y) / 2;
             const midY = webcamRef.current.videoHeight / 2;
 
-            const lookingAtScreen = avgEyeY <= midY + 30 && avgEyeY >= midY - 80;
-
-            if (lookingAtScreen) {
-              // User looking at screen
+            if (avgEyeY > midY + 30 || avgEyeY < midY - 80) {
+              // Looking away - pause video if playing
+              if (!videoRef.current.paused) videoRef.current.pause();
+              setUserLooking(false);
+              console.log("Looking away - video paused");
+            } else {
+              // Looking at screen - play video if paused
               if (videoRef.current.paused) {
                 videoRef.current.play().catch(() => {});
               }
               setUserLooking(true);
-            } else {
-              // User not looking
-              if (!videoRef.current.paused) {
-                videoRef.current.pause();
-              }
-              setUserLooking(false);
+              console.log("Looking at screen - video playing");
             }
           } else {
-            // No face detected - pause and user not looking
-            if (!videoRef.current.paused) {
-              videoRef.current.pause();
-            }
+            // No face detected - pause video
+            if (!videoRef.current.paused) videoRef.current.pause();
             setUserLooking(false);
+            console.log("No face detected - video paused");
           }
         } catch (error) {
           console.error("Detection error:", error);
@@ -119,15 +124,9 @@ export default function SmartVideoPlayer() {
         width="640"
         height="360"
         controls
-        src="/video01.mp4"
+        src="/video01.mp4" // Make sure this file is in public folder
         style={{ borderRadius: "10px", boxShadow: "0 0 10px gray" }}
       />
-
-      {!userLooking && (
-        <p style={{ marginTop: "1rem", color: "red", fontWeight: "bold" }}>
-          ⚠️ Please look at the screen to play the video.
-        </p>
-      )}
 
       <div style={{ marginTop: "20px" }}>
         <video
@@ -139,9 +138,17 @@ export default function SmartVideoPlayer() {
           style={{ borderRadius: "10px", border: "2px solid #333" }}
         />
         {cameraAllowed ? (
-          <p style={{ fontStyle: "italic" }}>
-            👀 Keep your eyes on the screen to play video.
-          </p>
+          <>
+            {userLooking ? (
+              <p style={{ fontStyle: "italic", color: "green" }}>
+                👀 You are looking at the screen, video playing.
+              </p>
+            ) : (
+              <p style={{ fontStyle: "italic", color: "red", fontWeight: "bold" }}>
+                👀 Please look at the screen to play the video.
+              </p>
+            )}
+          </>
         ) : (
           <p style={{ color: "red" }}>
             Camera not allowed. Please enable camera permission.
