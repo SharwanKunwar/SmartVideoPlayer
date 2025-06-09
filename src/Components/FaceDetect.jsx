@@ -5,18 +5,19 @@ export default function FaceDetect() {
   const videoRef = useRef(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [eyesOpen, setEyesOpen] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    // Load face-api models
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // Make sure your models are here
+        const MODEL_URL = "/models"; // Ensure models exist here
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
         setModelsLoaded(true);
-      } catch (error) {
-        setErrorMessage("Failed to load face-api models");
-        console.error(error);
+      } catch (err) {
+        console.error(err);
+        setErrorMessage("Failed to load models");
       }
     };
     loadModels();
@@ -25,7 +26,6 @@ export default function FaceDetect() {
   useEffect(() => {
     if (!modelsLoaded) return;
 
-    // Start webcam
     navigator.mediaDevices
       .getUserMedia({ video: true })
       .then((stream) => {
@@ -38,29 +38,48 @@ export default function FaceDetect() {
 
     let animationFrameId;
 
-    // Detection loop
-    const detectFace = async () => {
-      if (
-        videoRef.current &&
-        videoRef.current.readyState === 4
-      ) {
-        const detection = await faceapi.detectSingleFace(
-          videoRef.current,
-          new faceapi.TinyFaceDetectorOptions()
-        );
-        setFaceDetected(!!detection);
-      }
-      animationFrameId = requestAnimationFrame(detectFace);
+    const EAR = (eye) => {
+      const vertical1 = faceapi.euclideanDistance(eye[1], eye[5]);
+      const vertical2 = faceapi.euclideanDistance(eye[2], eye[4]);
+      const horizontal = faceapi.euclideanDistance(eye[0], eye[3]);
+      return (vertical1 + vertical2) / (2.0 * horizontal);
     };
 
-    detectFace();
+    const detect = async () => {
+      if (videoRef.current?.readyState === 4) {
+        const detection = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks(true);
+
+        if (detection) {
+          setFaceDetected(true);
+          const landmarks = detection.landmarks;
+          const leftEye = landmarks.getLeftEye();
+          const rightEye = landmarks.getRightEye();
+
+          const leftEAR = EAR(leftEye);
+          const rightEAR = EAR(rightEye);
+          const avgEAR = (leftEAR + rightEAR) / 2;
+
+          // Threshold to determine eye state
+          setEyesOpen(avgEAR > 0.25); // Adjust threshold based on lighting/camera
+        } else {
+          setFaceDetected(false);
+          setEyesOpen(null);
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(detect);
+    };
+
+    detect();
 
     return () => cancelAnimationFrame(animationFrameId);
   }, [modelsLoaded]);
 
   return (
     <div style={{ textAlign: "center", padding: "1rem" }}>
-      <h2>Face Detection Test</h2>
+      <h2>Face + Eye Detection</h2>
       <video
         ref={videoRef}
         width="320"
@@ -72,8 +91,10 @@ export default function FaceDetect() {
         {errorMessage
           ? errorMessage
           : faceDetected
-          ? "Detected ✅"
-          : "Not Detected ❌"}
+          ? `Face: Detected ✅ | Eyes: ${
+              eyesOpen === null ? "..." : eyesOpen ? "Open 👀" : "Closed 😴"
+            }`
+          : "Face Not Detected ❌"}
       </p>
     </div>
   );

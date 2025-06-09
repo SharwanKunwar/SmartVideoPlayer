@@ -6,9 +6,9 @@ import FaceDetect from './Components/FaceDetect';
 function App() {
   return (
     <div className="App">
-      <SmartVideoPlayer />
+      {/* <SmartVideoPlayer /> */}
       {/* <CameraTest/> */}
-      {/* <FaceDetect/> */}
+      <FaceDetect/>
     </div>
   );
 }
