@@ -7,34 +7,27 @@ export default function EyeStateDetector() {
   const [eyesOpen, setEyesOpen] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
+  // Load Models
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // Ensure models exist here
+        const MODEL_URL = "/models";
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
         setModelsLoaded(true);
       } catch (err) {
-        console.error(err);
+        console.error("Model loading error:", err);
         setErrorMessage("Failed to load models");
       }
     };
     loadModels();
   }, []);
 
+  // Run Detection
   useEffect(() => {
     if (!modelsLoaded) return;
 
-    navigator.mediaDevices
-      .getUserMedia({ video: true })
-      .then((stream) => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-      })
-      .catch(() => setErrorMessage("Camera access denied"));
-
+    let stream;
     let animationFrameId;
 
     const EAR = (eye) => {
@@ -59,18 +52,36 @@ export default function EyeStateDetector() {
           const rightEAR = EAR(rightEye);
           const avgEAR = (leftEAR + rightEAR) / 2;
 
-          setEyesOpen(avgEAR > 0.25); // Adjust threshold as needed
+          setEyesOpen(avgEAR > 0.22); // Adjusted threshold
         } else {
-          setEyesOpen(null); // No face, can't check eyes
+          setEyesOpen(null);
         }
       }
 
       animationFrameId = requestAnimationFrame(detect);
     };
 
-    detect();
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((s) => {
+        stream = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+        detect();
+      })
+      .catch((err) => {
+        console.error("Camera error:", err);
+        setErrorMessage("Camera access denied");
+      });
 
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
   }, [modelsLoaded]);
 
   return (
@@ -83,7 +94,7 @@ export default function EyeStateDetector() {
         muted
         style={{ border: "1px solid black", borderRadius: "8px" }}
       />
-      <p>
+      <p style={{ marginTop: "1rem", fontSize: "1.2rem" }}>
         {errorMessage
           ? errorMessage
           : eyesOpen === null
