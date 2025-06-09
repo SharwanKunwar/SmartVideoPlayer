@@ -59,7 +59,7 @@ export default function SmartVideoPlayer() {
     const detectFace = async () => {
       if (
         webcamRef.current &&
-        webcamRef.current.readyState === 4 &&
+        webcamRef.current.readyState >= 3 && // readyState check relaxed
         videoRef.current
       ) {
         try {
@@ -73,33 +73,40 @@ export default function SmartVideoPlayer() {
             )
             .withFaceLandmarks();
 
+          // Debug: see detection in console
           console.log("Detection result:", detection);
+
+          const midY = webcamRef.current.videoHeight / 2;
+          const lowerBound = midY - 50;
+          const upperBound = midY + 50;
 
           if (detection) {
             const leftEye = detection.landmarks.getLeftEye();
             const rightEye = detection.landmarks.getRightEye();
-
             const avgEyeY = (leftEye[0].y + rightEye[3].y) / 2;
-            const midY = webcamRef.current.videoHeight / 2;
 
-            if (avgEyeY > midY + 30 || avgEyeY < midY - 80) {
+            if (avgEyeY < lowerBound || avgEyeY > upperBound) {
               // Looking away - pause video if playing
-              if (!videoRef.current.paused) videoRef.current.pause();
-              setUserLooking(false);
-              console.log("Looking away - video paused");
-            } else {
-              // Looking at screen - play video if paused
-              if (videoRef.current.paused) {
-                videoRef.current.play().catch(() => {});
+              if (!videoRef.current.paused) {
+                videoRef.current.pause();
+                setUserLooking(false);
+                console.log("Looking away - video paused");
               }
-              setUserLooking(true);
-              console.log("Looking at screen - video playing");
+            } else {
+              // Looking at screen - play video if paused and ready
+              if (videoRef.current.paused && videoRef.current.readyState >= 3) {
+                videoRef.current.play().catch(() => {});
+                setUserLooking(true);
+                console.log("Looking at screen - video playing");
+              }
             }
           } else {
             // No face detected - pause video
-            if (!videoRef.current.paused) videoRef.current.pause();
-            setUserLooking(false);
-            console.log("No face detected - video paused");
+            if (!videoRef.current.paused) {
+              videoRef.current.pause();
+              setUserLooking(false);
+              console.log("No face detected - video paused");
+            }
           }
         } catch (error) {
           console.error("Detection error:", error);
@@ -124,7 +131,8 @@ export default function SmartVideoPlayer() {
         width="640"
         height="360"
         controls
-        src="/video01.mp4" // Make sure this file is in public folder
+        muted // Added muted to allow autoplay
+        src="/video01.mp4" // Ensure video is in public folder
         style={{ borderRadius: "10px", boxShadow: "0 0 10px gray" }}
       />
 
