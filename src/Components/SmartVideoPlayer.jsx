@@ -9,12 +9,13 @@ export default function SmartVideoPlayer() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [cameraAllowed, setCameraAllowed] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Loading models...");
+  const [userLooking, setUserLooking] = useState(true); // Track if user is looking
 
   // Load face-api models from public/models folder
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // Public folder models path
+        const MODEL_URL = "/models";
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         setModelsLoaded(true);
@@ -25,7 +26,6 @@ export default function SmartVideoPlayer() {
         setLoadingMessage("Failed to load face detection models.");
       }
     };
-
     loadModels();
   }, []);
 
@@ -50,7 +50,7 @@ export default function SmartVideoPlayer() {
     }
   }, [modelsLoaded]);
 
-  // Face detection loop using requestAnimationFrame for near-instant play/pause
+  // Face detection loop for play/pause + userLooking state
   useEffect(() => {
     if (!modelsLoaded || !cameraAllowed) return;
 
@@ -74,18 +74,27 @@ export default function SmartVideoPlayer() {
             const avgEyeY = (leftEye[0].y + rightEye[3].y) / 2;
             const midY = webcamRef.current.videoHeight / 2;
 
-            if (avgEyeY > midY + 30 || avgEyeY < midY - 80) {
-              // User looking away — pause if playing
-              if (!videoRef.current.paused) videoRef.current.pause();
-            } else {
-              // User looking at screen — play if paused
+            const lookingAtScreen = avgEyeY <= midY + 30 && avgEyeY >= midY - 80;
+
+            if (lookingAtScreen) {
+              // User looking at screen
               if (videoRef.current.paused) {
                 videoRef.current.play().catch(() => {});
               }
+              setUserLooking(true);
+            } else {
+              // User not looking
+              if (!videoRef.current.paused) {
+                videoRef.current.pause();
+              }
+              setUserLooking(false);
             }
           } else {
-            // No face detected — pause if playing
-            if (!videoRef.current.paused) videoRef.current.pause();
+            // No face detected - pause and user not looking
+            if (!videoRef.current.paused) {
+              videoRef.current.pause();
+            }
+            setUserLooking(false);
           }
         } catch (error) {
           console.error("Detection error:", error);
@@ -110,9 +119,15 @@ export default function SmartVideoPlayer() {
         width="640"
         height="360"
         controls
-        src="/video01.mp4"  // Make sure this file is in public folder
+        src="/video01.mp4"
         style={{ borderRadius: "10px", boxShadow: "0 0 10px gray" }}
       />
+
+      {!userLooking && (
+        <p style={{ marginTop: "1rem", color: "red", fontWeight: "bold" }}>
+          ⚠️ Please look at the screen to play the video.
+        </p>
+      )}
 
       <div style={{ marginTop: "20px" }}>
         <video
